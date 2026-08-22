@@ -13,7 +13,7 @@ from rich.console import Console
 
 from nanobot import __logo__, __version__
 from nanobot.agent.hook import AgentHook, AgentRunHookContext
-from nanobot.agent.hooks import create_file_edit_activity_hook
+from nanobot.agent.hooks import create_engram_memory_hook, create_file_edit_activity_hook
 from nanobot.agent.loop import AgentLoop
 from nanobot.agent.tools.mcp import MCPProvider
 from nanobot.agent.tools.registry import ToolRegistry
@@ -497,7 +497,7 @@ def _run_gateway(
         provider_signature=provider_snapshot.signature,
         local_trigger_store=trigger_store,
         hooks=[_MCPReadinessHook(mcp_provider)],
-        hook_factories=[create_file_edit_activity_hook],
+        hook_factories=[create_file_edit_activity_hook, create_engram_memory_hook],
         tool_registry=tools,
         recovery_admission=recovery,
     )

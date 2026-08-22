@@ -117,7 +117,7 @@ def agent(
                 raise typer.Exit(exit_code)
             return
 
-    from nanobot.agent.hooks import create_file_edit_activity_hook
+    from nanobot.agent.hooks import create_engram_memory_hook, create_file_edit_activity_hook
     from nanobot.agent.tools.mcp import MCPProvider
     from nanobot.agent.tools.registry import ToolRegistry
     from nanobot.bus.outbound_events import (
@@ -175,7 +175,7 @@ def agent(
             provider=provider,
             cron_service=cron,
             image_generation_provider_configs=image_gen_provider_configs(runtime_config),
-            hook_factories=[create_file_edit_activity_hook],
+            hook_factories=[create_file_edit_activity_hook, create_engram_memory_hook],
             tool_registry=tools,
         )
     except ValueError as exc:
