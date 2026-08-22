@@ -42,14 +42,13 @@ def capture_message_deliveries() -> Generator[set[tuple[str, str]], None, None]:
             "Do not use this for a normal reply in the current chat."
         ),
         channel=StringSchema(
-            "Optional target channel for cross-channel/proactive delivery. "
-            "Do not set this to the current runtime channel for a normal reply."
+            "Optional target channel. In this deployment cross-channel delivery is "
+            "disabled: omit it to deliver to the current conversation."
         ),
         chat_id=StringSchema(
-            "Optional target chat/user ID for cross-channel/proactive delivery. "
-            "On WebSocket/WebUI turns: omit chat_id to use the server's conversation id "
-            "(never pass client_id values like anon-…). "
-            "Do not set this to the current runtime chat for a normal reply."
+            "Optional target chat/user ID. In this deployment cross-chat delivery is "
+            "disabled: omit it to deliver to the current conversation "
+            "(never pass client_id values like anon-…)."
         ),
         media=ArraySchema(
             StringSchema(""),
@@ -119,13 +118,13 @@ class MessageTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Proactively send a message to a user/channel, optionally with file attachments. "
-            "Use this for reminders, cross-channel delivery, or explicit proactive sends. "
-            "Do not use this for the normal reply in the current chat: answer naturally instead. "
-            "If channel/chat_id would target the current runtime conversation, do not call this tool "
-            "unless the user explicitly asked you to proactively send an existing file attachment. "
-            "When generate_image creates images in the current chat, use the message tool "
-            "with the artifact paths in the media parameter to deliver the images to the user. "
+            "Proactively send a message to the current conversation, optionally with "
+            "file attachments. Use this for reminders or explicit proactive sends. "
+            "Cross-channel/cross-chat delivery to other chats is disabled in this "
+            "deployment (single-user hardening): omit channel/chat_id to deliver to "
+            "the current conversation. When generate_image creates images in the "
+            "current chat, use the message tool with the artifact paths in the media "
+            "parameter to deliver the images to the user. "
             "For proactive attachment delivery, use the 'media' parameter with file paths. "
             "Do NOT use read_file to send files — that only reads content for your own analysis."
         )
@@ -190,21 +189,18 @@ class MessageTool(Tool):
             else self._fallback_metadata
         )
         channel = channel or default_channel
-        explicit_chat_id = chat_id
-        if (
-            default_channel == "websocket"
-            and channel == "websocket"
-            and explicit_chat_id is not None
-            and str(explicit_chat_id).strip() != ""
-            and str(explicit_chat_id).strip() != str(default_chat_id).strip()
-        ):
-            return ToolResult.error(
-                "Error: chat_id does not match the active WebSocket conversation. "
-                "Omit chat_id (and usually channel) so delivery uses the current "
-                "conversation id from context — WebSocket client_id strings "
-                "(e.g. anon-…) are not chat ids."
-            )
         chat_id = chat_id or default_chat_id
+        # [PATCH: single-user hardening] Cross-channel/cross-chat delivery is
+        # disabled: a prompt-injected agent could otherwise exfiltrate
+        # workspace/conversation content to an arbitrary chat (e.g. a group an
+        # attacker added the bot to). Proactive sends are only allowed to the
+        # current conversation — omit channel/chat_id to use it.
+        if channel != default_channel or str(chat_id) != str(default_chat_id):
+            return ToolResult.error(
+                "Error: cross-channel/cross-chat delivery is disabled in this "
+                "deployment. Omit channel and chat_id to deliver to the current "
+                "conversation."
+            )
         # Only inherit default message_id when targeting the same channel+chat.
         # Cross-chat sends must not carry the original message_id, because
         # some channels (e.g. Feishu) use it to determine the target
