@@ -30,3 +30,15 @@ __all__ = [
     "tool_parameters",
     "tool_parameters_schema",
 ]
+
+# Hardening overlay (nanobot-brain image): apply workspace-guard and write-cap
+# wrappers. install() logs loudly on stderr if a nanobot-ai bump changed the
+# wrapped shapes, instead of silently shipping without the hardening.
+try:
+    from nanobot.agent.tools.guard_hardening import install as _install_guard_hardening
+
+    _install_guard_hardening()
+except Exception as _hardening_error:  # pragma: no cover - startup diagnostics
+    import sys
+
+    print(f"[nanobot-hardening] install failed: {_hardening_error}", file=sys.stderr)
