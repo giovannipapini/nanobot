@@ -1,0 +1,10 @@
+# Ruff (lint + formatter) — pinned to match the version used locally
+# (`ruff --version`). Bump rev and re-run `pre-commit run --all-files`.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      # lint with safe autofixes (imports, unused vars, …)
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

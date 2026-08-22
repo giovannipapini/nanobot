@@ -5,6 +5,7 @@
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,7 +14,7 @@ from loguru import logger
 from nanobot.agent.tools.base import Tool, ToolResult, tool_parameters
 from nanobot.agent.tools.context import ToolContext, current_request_context
 from nanobot.agent.tools.path_utils import resolve_workspace_path
-from nanobot.agent.tools.schema import ArraySchema, StringSchema, tool_parameters_schema
+from nanobot.agent.tools.schema import ArraySchema, BooleanSchema, StringSchema, tool_parameters_schema
 from nanobot.bus.events import OutboundMessage
 from nanobot.config.paths import get_workspace_path
 from nanobot.security.workspace_access import current_tool_workspace
@@ -37,13 +38,9 @@ def capture_message_deliveries() -> Generator[set[tuple[str, str]], None, None]:
 
 @tool_parameters(
     tool_parameters_schema(
-        content=StringSchema(
-            "Message content for proactive or cross-channel delivery. "
-            "Do not use this for a normal reply in the current chat."
-        ),
+        content=StringSchema("Message content for proactive or cross-channel delivery. Do not use this for a normal reply in the current chat."),
         channel=StringSchema(
-            "Optional target channel. In this deployment cross-channel delivery is "
-            "disabled: omit it to deliver to the current conversation."
+            "Optional target channel. In this deployment cross-channel delivery is disabled: omit it to deliver to the current conversation."
         ),
         chat_id=StringSchema(
             "Optional target chat/user ID. In this deployment cross-chat delivery is "
@@ -53,13 +50,21 @@ def capture_message_deliveries() -> Generator[set[tuple[str, str]], None, None]:
         media=ArraySchema(
             StringSchema(""),
             description=(
-                "Optional list of existing file paths to attach. "
-                "Use artifact paths returned by generate_image here when delivering generated images."
+                "Optional list of existing file paths to attach. Use artifact paths returned by generate_image here when delivering generated images."
             ),
         ),
         buttons=ArraySchema(
             ArraySchema(StringSchema("Button label")),
             description="Optional: inline keyboard buttons as list of rows, each row is list of button labels.",
+        ),
+        notify=BooleanSchema(
+            description=(
+                "Set true only for proactive owner notifications (e.g. alert triage) that "
+                "must reach the owner's chat even when this conversation runs on another "
+                "channel. The destination is fixed by the NANOBOT_NOTIFY_TARGET config — "
+                "it cannot be chosen per call. Never use for normal replies; never combine "
+                "with channel/chat_id."
+            ),
         ),
         required=["content"],
     )
@@ -77,9 +82,7 @@ class MessageTool(Tool):
         restrict_to_workspace: bool = False,
     ):
         self._send_callback = send_callback
-        self._workspace = (
-            Path(workspace).expanduser() if workspace is not None else get_workspace_path()
-        )
+        self._workspace = Path(workspace).expanduser() if workspace is not None else get_workspace_path()
         self._restrict_to_workspace = restrict_to_workspace
         self._fallback_channel = default_channel
         self._fallback_chat_id = default_chat_id
@@ -155,6 +158,7 @@ class MessageTool(Tool):
         message_id: str | None = None,
         media: list[str] | None = None,
         buttons: Any = None,
+        notify: bool = False,
         **kwargs: Any,
     ) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
         from nanobot.utils.helpers import strip_think
@@ -188,14 +192,30 @@ class MessageTool(Tool):
             if request_ctx is not None
             else self._fallback_metadata
         )
+        # [FEATURE: owner notify] Opt-in proactive notification target, locked by
+        # configuration rather than by the caller: when NANOBOT_NOTIFY_TARGET
+        # ('channel:chat_id') is set, `notify=true` delivers exactly there from any
+        # conversation (e.g. an API-driven triage turn reaching the Telegram DM).
+        # The agent can flip the flag but never choose a destination.
+        notify_used = False
+        if notify:
+            if channel is not None or chat_id is not None:
+                return ToolResult.error("Error: notify=true cannot be combined with explicit channel/chat_id")
+            configured = os.environ.get("NANOBOT_NOTIFY_TARGET", "").strip()
+            n_channel, sep, n_chat = configured.partition(":")
+            if not sep or not n_channel or not n_chat:
+                return ToolResult.error("Error: notify requested but NANOBOT_NOTIFY_TARGET is not set to a valid 'channel:chat_id'")
+            channel, chat_id = n_channel, n_chat
+            notify_used = True
         channel = channel or default_channel
         chat_id = chat_id or default_chat_id
         # [PATCH: single-user hardening] Cross-channel/cross-chat delivery is
         # disabled: a prompt-injected agent could otherwise exfiltrate
         # workspace/conversation content to an arbitrary chat (e.g. a group an
         # attacker added the bot to). Proactive sends are only allowed to the
-        # current conversation — omit channel/chat_id to use it.
-        if channel != default_channel or str(chat_id) != str(default_chat_id):
+        # current conversation — omit channel/chat_id to use it. Exception: the
+        # configuration-locked notify target above.
+        if not notify_used and (channel != default_channel or str(chat_id) != str(default_chat_id)):
             return ToolResult.error(
                 "Error: cross-channel/cross-chat delivery is disabled in this "
                 "deployment. Omit channel and chat_id to deliver to the current "
@@ -206,7 +226,7 @@ class MessageTool(Tool):
         # some channels (e.g. Feishu) use it to determine the target
         # conversation via their Reply API, which would route the message
         # to the wrong chat entirely.
-        same_target = channel == default_channel and chat_id == default_chat_id
+        same_target = not notify_used and (channel == default_channel and chat_id == default_chat_id)
         if same_target:
             message_id = message_id or default_message_id
         else:

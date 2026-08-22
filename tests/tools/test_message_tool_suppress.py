@@ -55,11 +55,14 @@ class TestMessageToolSuppressLogic:
         assert result is None  # suppressed
 
     @pytest.mark.asyncio
-    async def test_not_suppress_when_sent_to_different_target(self, tmp_path: Path) -> None:
+    async def test_not_suppress_when_sent_to_different_target(self, tmp_path: Path, monkeypatch) -> None:
+        """Under deployment hardening the only cross-conversation send is the
+        config-locked notify target; it must still count as "sent" for suppression."""
+        monkeypatch.setenv("NANOBOT_NOTIFY_TARGET", "email:user@example.com")
         loop = _make_loop(tmp_path)
         tool_call = ToolCallRequest(
             id="call1", name="message",
-            arguments={"content": "Email content", "channel": "email", "chat_id": "user@example.com"},
+            arguments={"content": "Email content", "notify": True},
         )
         calls = iter([
             LLMResponse(content="", tool_calls=[tool_call]),
@@ -195,9 +198,12 @@ class TestMessageToolSchema:
     def test_schema_discourages_current_chat_replies(self) -> None:
         tool = MessageTool()
 
-        assert "Do not use this for the normal reply in the current chat" in tool.description
+        assert "Cross-channel/cross-chat delivery to other chats is disabled" in tool.description
         assert "generate_image creates images in the current chat" in tool.description
         assert (
             "Do not use this for a normal reply in the current chat"
             in tool.parameters["properties"]["content"]["description"]
         )
+        # deployment hardening: cross-channel delivery is locked down, notify is
+        # the only cross-conversation escape hatch and it is config-targeted.
+        assert "notify" in tool.parameters["properties"]
