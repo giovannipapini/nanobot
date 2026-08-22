@@ -89,6 +89,9 @@ class _FakeBot:
     async def send_audio(self, **kwargs) -> None:
         self.sent_media.append({"kind": "audio", **kwargs})
 
+    async def send_sticker(self, **kwargs) -> None:
+        self.sent_media.append({"kind": "sticker", **kwargs})
+
     async def send_document(self, **kwargs) -> None:
         self.sent_media.append({"kind": "document", **kwargs})
 
@@ -1540,6 +1543,66 @@ async def test_send_local_media_preserves_filename(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_webp_goes_out_as_sticker(tmp_path: Path) -> None:
+    """WEBP (and TGS) media must use sendSticker, not sendPhoto — a sticker sent
+    as a photo arrives as an ordinary image. Local stickers carry no `filename`
+    kwarg (PTB's send_sticker does not accept one)."""
+    channel = TelegramChannel(
+        TelegramConfig(enabled=True, token="123:abc", allow_from=["*"]),
+        MessageBus(),
+    )
+    channel._app = _FakeApp(lambda: None)
+    sticker_file = tmp_path / "meme.webp"
+    sticker_file.write_bytes(b"RIFF....WEBP")
+
+    await channel.send(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="",
+            media=[str(sticker_file)],
+        )
+    )
+
+    assert channel._app.bot.sent_media == [
+        {
+            "kind": "sticker",
+            "chat_id": 123,
+            "sticker": b"RIFF....WEBP",
+            "reply_parameters": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_remote_sticker_url_after_security_validation(monkeypatch) -> None:
+    channel = TelegramChannel(
+        TelegramConfig(enabled=True, token="123:abc", allow_from=["*"]),
+        MessageBus(),
+    )
+    channel._app = _FakeApp(lambda: None)
+    monkeypatch.setattr("nanobot.channels.telegram.runtime.validate_url_target", lambda url: (True, ""))
+
+    await channel.send(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="",
+            media=["https://example.com/cat.tgs"],
+        )
+    )
+
+    assert channel._app.bot.sent_media == [
+        {
+            "kind": "sticker",
+            "chat_id": 123,
+            "sticker": "https://example.com/cat.tgs",
+            "reply_parameters": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_send_blocks_unsafe_remote_media_url(monkeypatch) -> None:
     channel = TelegramChannel(
         TelegramConfig(enabled=True, token="123:abc", allow_from=["*"]),
@@ -2722,6 +2785,8 @@ def test_markdown_to_html_code_block_special_chars_language() -> None:
 
     stripped = _strip_md_block(text)
     assert stripped == "int main() { return 0; }\n"
+
+
 def test_markdown_to_html_code_block_same_line_no_newline() -> None:
     """
     Locks out the regression where triple-backtick content without a newline

@@ -814,8 +814,13 @@ class TelegramChannel(BaseChannel):
     def _get_media_type(path: str) -> str:
         """Guess media type from file extension."""
         ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-        if ext in ("jpg", "jpeg", "png", "gif", "webp"):
+        if ext in ("jpg", "jpeg", "png", "gif"):
             return "photo"
+        # Telegram static stickers are WEBP (512 px, ≤512 KB) and animated ones
+        # are TGS; both must go out via sendSticker — as ``photo`` they would
+        # arrive as an ordinary image instead of a real sticker.
+        if ext in ("webp", "tgs"):
+            return "sticker"
         if ext in ("mp4", "mov", "avi", "mkv", "webm", "3gp"):
             return "video"
         if ext == "ogg":
@@ -1005,12 +1010,14 @@ class TelegramChannel(BaseChannel):
                     "video": app.bot.send_video,
                     "voice": app.bot.send_voice,
                     "audio": app.bot.send_audio,
+                    "sticker": app.bot.send_sticker,
                 }.get(media_type, app.bot.send_document)
                 param = {
                     "photo": "photo",
                     "video": "video",
                     "voice": "voice",
                     "audio": "audio",
+                    "sticker": "sticker",
                 }.get(media_type, "document")
                 extra: dict[str, Any] = {}
                 if media_type == "video":
@@ -1033,7 +1040,11 @@ class TelegramChannel(BaseChannel):
 
                 media_bytes = Path(media_path).read_bytes()
                 filename = Path(media_path).name
-                send_kwargs = {param: media_bytes, "filename": filename}
+                if media_type == "sticker":
+                    # python-telegram-bot's send_sticker takes no `filename`.
+                    send_kwargs = {param: media_bytes}
+                else:
+                    send_kwargs = {param: media_bytes, "filename": filename}
                 await self._call_with_retry(
                     sender,
                     chat_id=chat_id,
