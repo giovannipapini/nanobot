@@ -1544,9 +1544,7 @@ async def test_send_local_media_preserves_filename(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_send_webp_goes_out_as_sticker(tmp_path: Path) -> None:
-    """WEBP (and TGS) media must use sendSticker, not sendPhoto — a sticker sent
-    as a photo arrives as an ordinary image. Local stickers carry no `filename`
-    kwarg (PTB's send_sticker does not accept one)."""
+    """WEBP/TGS media must use sendSticker; PTB's send_sticker takes no `filename`."""
     channel = TelegramChannel(
         TelegramConfig(enabled=True, token="123:abc", allow_from=["*"]),
         MessageBus(),

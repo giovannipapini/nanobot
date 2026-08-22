@@ -204,6 +204,6 @@ class TestMessageToolSchema:
             "Do not use this for a normal reply in the current chat"
             in tool.parameters["properties"]["content"]["description"]
         )
-        # deployment hardening: cross-channel delivery is locked down, notify is
-        # the only cross-conversation escape hatch and it is config-targeted.
+        # deployment hardening: cross-channel delivery is locked down; notify is
+        # the only cross-conversation path and it is config-targeted
         assert "notify" in tool.parameters["properties"]

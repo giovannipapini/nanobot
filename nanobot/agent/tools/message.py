@@ -4,8 +4,8 @@
 
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import contextmanager
-from contextvars import ContextVar, Token
 import os
+from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any, cast
 
@@ -169,34 +169,17 @@ class MessageTool(Tool):
         if buttons is not None:
             raw_buttons = cast(list[Any], buttons) if isinstance(buttons, list) else None
             if raw_buttons is None or any(
-                not isinstance(row, list)
-                or any(not isinstance(label, str) for label in cast(list[Any], row))
-                for row in raw_buttons
+                not isinstance(row, list) or any(not isinstance(label, str) for label in cast(list[Any], row)) for row in raw_buttons
             ):
                 return ToolResult.error("Error: buttons must be a list of list of strings")
             button_rows = cast(list[list[str]], raw_buttons)
         request_ctx = current_request_context()
-        default_channel = (
-            request_ctx.channel if request_ctx is not None else self._fallback_channel
-        )
-        default_chat_id = (
-            request_ctx.chat_id if request_ctx is not None else self._fallback_chat_id
-        )
-        default_message_id = (
-            request_ctx.message_id
-            if request_ctx is not None
-            else self._fallback_message_id
-        )
-        default_metadata = (
-            request_ctx.metadata
-            if request_ctx is not None
-            else self._fallback_metadata
-        )
-        # [FEATURE: owner notify] Opt-in proactive notification target, locked by
-        # configuration rather than by the caller: when NANOBOT_NOTIFY_TARGET
-        # ('channel:chat_id') is set, `notify=true` delivers exactly there from any
-        # conversation (e.g. an API-driven triage turn reaching the Telegram DM).
-        # The agent can flip the flag but never choose a destination.
+        default_channel = request_ctx.channel if request_ctx is not None else self._fallback_channel
+        default_chat_id = request_ctx.chat_id if request_ctx is not None else self._fallback_chat_id
+        default_message_id = request_ctx.message_id if request_ctx is not None else self._fallback_message_id
+        default_metadata = request_ctx.metadata if request_ctx is not None else self._fallback_metadata
+        # [FEATURE: owner notify] config-locked target (NANOBOT_NOTIFY_TARGET,
+        # 'channel:chat_id'): the agent flips the flag, never picks a destination.
         notify_used = False
         if notify:
             if channel is not None or chat_id is not None:
@@ -209,12 +192,9 @@ class MessageTool(Tool):
             notify_used = True
         channel = channel or default_channel
         chat_id = chat_id or default_chat_id
-        # [PATCH: single-user hardening] Cross-channel/cross-chat delivery is
-        # disabled: a prompt-injected agent could otherwise exfiltrate
-        # workspace/conversation content to an arbitrary chat (e.g. a group an
-        # attacker added the bot to). Proactive sends are only allowed to the
-        # current conversation — omit channel/chat_id to use it. Exception: the
-        # configuration-locked notify target above.
+        # [PATCH: single-user hardening] cross-channel/cross-chat delivery is
+        # disabled: a prompt-injected agent could otherwise exfiltrate content to
+        # an arbitrary chat. Exception: the config-locked notify target above.
         if not notify_used and (channel != default_channel or str(chat_id) != str(default_chat_id)):
             return ToolResult.error(
                 "Error: cross-channel/cross-chat delivery is disabled in this "
@@ -269,11 +249,7 @@ class MessageTool(Tool):
             if sends is not None:
                 sends.add((channel, chat_id))
             media_info = f" with {len(media)} attachments" if media else ""
-            button_info = (
-                f" with {sum(len(row) for row in button_rows)} button(s)"
-                if button_rows
-                else ""
-            )
+            button_info = f" with {sum(len(row) for row in button_rows)} button(s)" if button_rows else ""
             return f"Message sent to {channel}:{chat_id}{media_info}{button_info}"
         except Exception as e:
             return ToolResult.error(f"Error sending message: {str(e)}")

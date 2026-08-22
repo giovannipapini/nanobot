@@ -189,10 +189,10 @@ def _tool_hint_to_telegram_blockquote(text: str) -> str:
 
 def _strip_md(s: str) -> str:
     """Strip markdown inline formatting from text."""
-    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
-    s = re.sub(r'__(.+?)__', r'\1', s)
-    s = re.sub(r'~~(.+?)~~', r'\1', s)
-    s = re.sub(r'`([^`]+)`', r'\1', s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    s = re.sub(r"__(.+?)__", r"\1", s)
+    s = re.sub(r"~~(.+?)~~", r"\1", s)
+    s = re.sub(r"`([^`]+)`", r"\1", s)
     return s.strip()
 
 
@@ -203,24 +203,24 @@ def _strip_md_block(text: str) -> str:
     markdown syntax while the response is still being generated.
     """
     # Code blocks -> just the code
-    text = re.sub(r'```(?:[^\n]*\n)?([\s\S]*?)```', r'\1', text)
+    text = re.sub(r"```(?:[^\n]*\n)?([\s\S]*?)```", r"\1", text)
     # Headers -> plain text
-    text = re.sub(r'^#{1,6}\s+(.+)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"\1", text, flags=re.MULTILINE)
     # Blockquotes
-    text = re.sub(r'^>\s*(.*)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r"^>\s*(.*)$", r"\1", text, flags=re.MULTILINE)
     # Bold / italic / strikethrough
-    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-    text = re.sub(r'__(.+?)__', r'\1', text)
-    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'\1', text)
-    text = re.sub(r'~~(.+?)~~', r'\1', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])", r"\1", text)
+    text = re.sub(r"~~(.+?)~~", r"\1", text)
     # Inline code
-    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
     # Links [text](url) -> text
-    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     # Bullet lists
-    text = re.sub(r'^[-*]\s+', '• ', text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*]\s+", "• ", text, flags=re.MULTILINE)
     # Numbered lists (normalize spacing)
-    text = re.sub(r'^(\d+)\.\s+', r'\1. ', text, flags=re.MULTILINE)
+    text = re.sub(r"^(\d+)\.\s+", r"\1. ", text, flags=re.MULTILINE)
     return text
 
 
@@ -228,32 +228,32 @@ def _render_table_box(table_lines: list[str]) -> str:
     """Convert markdown pipe-table to compact aligned text for <pre> display."""
 
     def dw(s: str) -> int:
-        return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+        return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
 
     rows: list[list[str]] = []
     has_sep = False
     for line in table_lines:
-        cells = [_strip_md(c) for c in line.strip().strip('|').split('|')]
-        if all(re.match(r'^:?-+:?$', c) for c in cells if c):
+        cells = [_strip_md(c) for c in line.strip().strip("|").split("|")]
+        if all(re.match(r"^:?-+:?$", c) for c in cells if c):
             has_sep = True
             continue
         rows.append(cells)
     if not rows or not has_sep:
-        return '\n'.join(table_lines)
+        return "\n".join(table_lines)
 
     ncols = max(len(r) for r in rows)
     for r in rows:
-        r.extend([''] * (ncols - len(r)))
+        r.extend([""] * (ncols - len(r)))
     widths = [max(dw(r[c]) for r in rows) for c in range(ncols)]
 
     def dr(cells: list[str]) -> str:
-        return '  '.join(f'{c}{" " * (w - dw(c))}' for c, w in zip(cells, widths))
+        return "  ".join(f"{c}{' ' * (w - dw(c))}" for c, w in zip(cells, widths))
 
     out = [dr(rows[0])]
-    out.append('  '.join('─' * w for w in widths))
+    out.append("  ".join("─" * w for w in widths))
     for row in rows[1:]:
         out.append(dr(row))
-    return '\n'.join(out)
+    return "\n".join(out)
 
 
 def _markdown_to_telegram_html(text: str) -> str:
@@ -265,24 +265,25 @@ def _markdown_to_telegram_html(text: str) -> str:
 
     # 1. Extract and protect code blocks (preserve content from other processing)
     code_blocks: list[str] = []
+
     def save_code_block(m: re.Match[str]) -> str:
         code_blocks.append(m.group(1))
         return f"\x00CB{len(code_blocks) - 1}\x00"
 
-    text = re.sub(r'```(?:[^\n]*\n)?([\s\S]*?)```', save_code_block, text)
+    text = re.sub(r"```(?:[^\n]*\n)?([\s\S]*?)```", save_code_block, text)
 
     # 1.5. Convert markdown tables to box-drawing (reuse code_block placeholders)
-    lines = text.split('\n')
+    lines = text.split("\n")
     rebuilt: list[str] = []
     li = 0
     while li < len(lines):
-        if re.match(r'^\s*\|.+\|', lines[li]):
+        if re.match(r"^\s*\|.+\|", lines[li]):
             tbl: list[str] = []
-            while li < len(lines) and re.match(r'^\s*\|.+\|', lines[li]):
+            while li < len(lines) and re.match(r"^\s*\|.+\|", lines[li]):
                 tbl.append(lines[li])
                 li += 1
             box = _render_table_box(tbl)
-            if box != '\n'.join(tbl):
+            if box != "\n".join(tbl):
                 code_blocks.append(box)
                 rebuilt.append(f"\x00CB{len(code_blocks) - 1}\x00")
             else:
@@ -290,43 +291,44 @@ def _markdown_to_telegram_html(text: str) -> str:
         else:
             rebuilt.append(lines[li])
             li += 1
-    text = '\n'.join(rebuilt)
+    text = "\n".join(rebuilt)
 
     # 2. Extract and protect inline code
     inline_codes: list[str] = []
+
     def save_inline_code(m: re.Match[str]) -> str:
         inline_codes.append(m.group(1))
         return f"\x00IC{len(inline_codes) - 1}\x00"
 
-    text = re.sub(r'`([^`]+)`', save_inline_code, text)
+    text = re.sub(r"`([^`]+)`", save_inline_code, text)
 
     # 3. Headers # Title -> <b>Title</b> (preserve visual hierarchy)
-    text = re.sub(r'^#{1,6}\s+(.+)$', r'⟪B⟫\1⟪/B⟫', text, flags=re.MULTILINE)
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"⟪B⟫\1⟪/B⟫", text, flags=re.MULTILINE)
 
     # 4. Blockquotes > text -> just the text (before HTML escaping)
-    text = re.sub(r'^>\s*(.*)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r"^>\s*(.*)$", r"\1", text, flags=re.MULTILINE)
 
     # 5. Escape HTML special characters
     text = _escape_telegram_html(text)
 
     # 6. Links [text](url) - must be before bold/italic to handle nested cases
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
 
     # 7. Bold **text** or __text__
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
 
     # 8. Italic _text_ (avoid matching inside words like some_var_name)
-    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+    text = re.sub(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])", r"<i>\1</i>", text)
 
     # 9. Strikethrough ~~text~~
-    text = re.sub(r'~~(.+?)~~', r'<s>\1</s>', text)
+    text = re.sub(r"~~(.+?)~~", r"<s>\1</s>", text)
 
     # 10. Bullet lists - item -> • item
-    text = re.sub(r'^[-*]\s+', '• ', text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*]\s+", "• ", text, flags=re.MULTILINE)
 
     # 10.5. Numbered lists  1. item -> 1. item (keep number, normalize indent)
-    text = re.sub(r'^(\d+)\.\s+', r'\1. ', text, flags=re.MULTILINE)
+    text = re.sub(r"^(\d+)\.\s+", r"\1. ", text, flags=re.MULTILINE)
 
     # 11. Restore inline code with HTML tags
     for i, code in enumerate(inline_codes):
@@ -341,13 +343,14 @@ def _markdown_to_telegram_html(text: str) -> str:
         text = text.replace(f"\x00CB{i}\x00", f"<pre><code>{escaped}</code></pre>")
 
     # 13. Restore header bold markers (inserted in step 3, after HTML escaping)
-    text = text.replace('⟪B⟫', '<b>').replace('⟪/B⟫', '</b>')
+    text = text.replace("⟪B⟫", "<b>").replace("⟪/B⟫", "</b>")
 
     return text
 
 
 def _split_telegram_markdown_html_chunks(
-    content: str, max_html_len: int,
+    content: str,
+    max_html_len: int,
 ) -> list[tuple[str, str]]:
     """Return raw Markdown and rendered HTML chunk pairs within Telegram's limit."""
     chunks: list[tuple[str, str]] = []
@@ -385,6 +388,7 @@ _STREAM_EDIT_INTERVAL_DEFAULT = 0.6  # min seconds between edit_message_text cal
 @dataclass
 class _StreamBuf:
     """Per-chat streaming accumulator for progressive message editing."""
+
     text: str = ""
     message_id: int | None = None
     last_edit: float = 0.0
@@ -450,9 +454,7 @@ class TelegramConfig(Base):
         if not secret:
             raise ValueError("webhook_secret_token is required when Telegram mode is webhook")
         if len(secret) > 256 or re.match(r"^[A-Za-z0-9_-]+$", secret) is None:
-            raise ValueError(
-                "webhook_secret_token must be 1-256 characters using only A-Z, a-z, 0-9, _ and -"
-            )
+            raise ValueError("webhook_secret_token must be 1-256 characters using only A-Z, a-z, 0-9, _ and -")
         return self
 
 
@@ -489,9 +491,7 @@ class TelegramChannel(BaseChannel):
 
     # Regex for slash commands routed to AgentLoop via ``_forward_command``.
     # Hyphenated ``dream-*`` commands stay on a separate handler (below).
-    TELEGRAM_BUS_SLASH_COMMAND_RE = re.compile(
-        r"^/(?:new|stop|restart|status|dream|history|goal|trigger|pairing|model|skill)(?:@\w+)?(?:\s+.*)?$"
-    )
+    TELEGRAM_BUS_SLASH_COMMAND_RE = re.compile(r"^/(?:new|stop|restart|status|dream|history|goal|trigger|pairing|model|skill)(?:@\w+)?(?:\s+.*)?$")
 
     @classmethod
     def default_config(cls) -> dict[str, Any]:
@@ -605,8 +605,7 @@ class TelegramChannel(BaseChannel):
             if not stalled or not self._running:
                 break
             self.logger.warning(
-                "polling stalled: no getUpdates round trip for {:.0f}s; "
-                "rebuilding connection pools and restarting",
+                "polling stalled: no getUpdates round trip for {:.0f}s; rebuilding connection pools and restarting",
                 time.monotonic() - self._last_poll_ok,
             )
             await self._teardown_app()
@@ -649,9 +648,7 @@ class TelegramChannel(BaseChannel):
         )
         self._app.add_handler(
             MessageHandler(
-                filters.Regex(
-                    r"^/(dream-log|dream_log|dream-restore|dream_restore|dream-prompt|dream_prompt)(?:@\w+)?(?:\s+.*)?$"
-                ),
+                filters.Regex(r"^/(dream-log|dream_log|dream-restore|dream_restore|dream-prompt|dream_prompt)(?:@\w+)?(?:\s+.*)?$"),
                 self._forward_command,
             )
         )
@@ -660,11 +657,19 @@ class TelegramChannel(BaseChannel):
         # Add message handler for text, photos, video, voice, documents, and locations
         self._app.add_handler(
             MessageHandler(
-                (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE
-                 | filters.ANIMATION | filters.VOICE | filters.AUDIO
-                 | filters.Document.ALL | filters.LOCATION)
+                (
+                    filters.TEXT
+                    | filters.PHOTO
+                    | filters.VIDEO
+                    | filters.VIDEO_NOTE
+                    | filters.ANIMATION
+                    | filters.VOICE
+                    | filters.AUDIO
+                    | filters.Document.ALL
+                    | filters.LOCATION
+                )
                 & ~filters.COMMAND,
-                self._on_message
+                self._on_message,
             )
         )
 
@@ -816,9 +821,8 @@ class TelegramChannel(BaseChannel):
         ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
         if ext in ("jpg", "jpeg", "png", "gif"):
             return "photo"
-        # Telegram static stickers are WEBP (512 px, ≤512 KB) and animated ones
-        # are TGS; both must go out via sendSticker — as ``photo`` they would
-        # arrive as an ordinary image instead of a real sticker.
+        # telegram static stickers are WEBP, animated ones TGS; sent as photo they
+        # would arrive as ordinary images instead of real stickers
         if ext in ("webp", "tgs"):
             return "sticker"
         if ext in ("mp4", "mov", "avi", "mkv", "webm", "3gp"):
@@ -837,11 +841,7 @@ class TelegramChannel(BaseChannel):
     def _is_rich_capability_error(exc: Exception) -> bool:
         """True when the error indicates sendRichMessage is unavailable."""
         err = str(exc).lower()
-        return (
-            "method not found" in err
-            or "unknown method" in err
-            or "bad request: invalid parameter" in err
-        )
+        return "method not found" in err or "unknown method" in err or "bad request: invalid parameter" in err
 
     async def _try_send_rich(
         self,
@@ -871,11 +871,13 @@ class TelegramChannel(BaseChannel):
             else:
                 payload["reply_parameters"] = reply_params
         if thread_kwargs:
-            payload.update({
-                k: v
-                for k, v in thread_kwargs.items()
-                if v is not None  # pyright: ignore[reportUnnecessaryComparison]
-            })
+            payload.update(
+                {
+                    k: v
+                    for k, v in thread_kwargs.items()
+                    if v is not None  # pyright: ignore[reportUnnecessaryComparison]
+                }
+            )
         if reply_markup is not None:
             payload["reply_markup"] = reply_markup
 
@@ -996,13 +998,10 @@ class TelegramChannel(BaseChannel):
         reply_params = None
         if self.config.reply_to_message:
             if reply_to_message_id:
-                reply_params = ReplyParameters(
-                    message_id=reply_to_message_id,
-                    allow_sending_without_reply=True
-                )
+                reply_params = ReplyParameters(message_id=reply_to_message_id, allow_sending_without_reply=True)
 
         # Send media files
-        for media_path in (msg.media or []):
+        for media_path in msg.media or []:
             try:
                 media_type = self._get_media_type(media_path)
                 sender = {
@@ -1076,22 +1075,25 @@ class TelegramChannel(BaseChannel):
             # Bot API 10.1 rich fast-path: send raw markdown via sendRichMessage.
             # All non-blockquote content tries rich first; _rich_send_disabled
             # latches off permanently if the server doesn't support it.
-            if (
-                not render_as_blockquote
-                and self.config.rich_messages
-                and not getattr(self, "_rich_send_disabled", False)
-            ):
+            if not render_as_blockquote and self.config.rich_messages and not getattr(self, "_rich_send_disabled", False):
                 rich_ok = await self._try_send_rich(
-                    chat_id, text, reply_params, thread_kwargs, reply_markup,
+                    chat_id,
+                    text,
+                    reply_params,
+                    thread_kwargs,
+                    reply_markup,
                 )
                 if rich_ok:
                     return
 
             chunks = _split_telegram_markdown(text, TELEGRAM_MAX_MESSAGE_LEN)
             for i, chunk in enumerate(chunks):
-                is_last = (i == len(chunks) - 1)
+                is_last = i == len(chunks) - 1
                 await self._send_text(
-                    chat_id, chunk, reply_params, thread_kwargs,
+                    chat_id,
+                    chunk,
+                    reply_params,
+                    thread_kwargs,
                     render_as_blockquote=render_as_blockquote,
                     reply_markup=reply_markup if is_last else None,
                 )
@@ -1114,21 +1116,21 @@ class TelegramChannel(BaseChannel):
                 delay = _SEND_RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 self.logger.warning(
                     "timeout (attempt {}/{}), retrying in {:.1f}s",
-                    attempt, _SEND_MAX_RETRIES, delay,
+                    attempt,
+                    _SEND_MAX_RETRIES,
+                    delay,
                 )
                 await asyncio.sleep(delay)
             except RetryAfter as e:
                 if attempt == _SEND_MAX_RETRIES:
                     raise
                 retry_after = e.retry_after
-                delay = (
-                    retry_after.total_seconds()
-                    if isinstance(retry_after, timedelta)
-                    else float(retry_after)
-                )
+                delay = retry_after.total_seconds() if isinstance(retry_after, timedelta) else float(retry_after)
                 self.logger.warning(
                     "Flood Control (attempt {}/{}), retrying in {:.1f}s",
-                    attempt, _SEND_MAX_RETRIES, delay,
+                    attempt,
+                    _SEND_MAX_RETRIES,
+                    delay,
                 )
                 await asyncio.sleep(delay)
         raise RuntimeError("Telegram retry loop exited unexpectedly")
@@ -1148,7 +1150,9 @@ class TelegramChannel(BaseChannel):
             html = _tool_hint_to_telegram_blockquote(text) if render_as_blockquote else _markdown_to_telegram_html(text)
             await self._call_with_retry(
                 app.bot.send_message,
-                chat_id=chat_id, text=html, parse_mode="HTML",
+                chat_id=chat_id,
+                text=html,
+                parse_mode="HTML",
                 reply_parameters=reply_params,
                 reply_markup=reply_markup,
                 **(thread_kwargs or {}),
@@ -1337,19 +1341,19 @@ class TelegramChannel(BaseChannel):
         try:
             await self._call_with_retry(
                 app.bot.edit_message_text,
-                chat_id=chat_id, message_id=buf.message_id,
+                chat_id=chat_id,
+                message_id=buf.message_id,
                 text=first_html,
                 parse_mode="HTML",
             )
         except BadRequest as e:
             if not self._is_not_modified_error(e):
-                self.logger.warning(
-                    "Stream overflow HTML edit failed, falling back to plain text: {}", e
-                )
+                self.logger.warning("Stream overflow HTML edit failed, falling back to plain text: {}", e)
                 try:
                     await self._call_with_retry(
                         app.bot.edit_message_text,
-                        chat_id=chat_id, message_id=buf.message_id,
+                        chat_id=chat_id,
+                        message_id=buf.message_id,
                         text=first_markdown,
                     )
                 except Exception as plain_error:
@@ -1364,15 +1368,18 @@ class TelegramChannel(BaseChannel):
             try:
                 return await self._call_with_retry(
                     app.bot.send_message,
-                    chat_id=chat_id, text=html, parse_mode="HTML", **thread_kwargs,
+                    chat_id=chat_id,
+                    text=html,
+                    parse_mode="HTML",
+                    **thread_kwargs,
                 )
             except BadRequest as e:
-                self.logger.warning(
-                    "Stream overflow HTML send failed, falling back to plain text: {}", e
-                )
+                self.logger.warning("Stream overflow HTML send failed, falling back to plain text: {}", e)
                 return await self._call_with_retry(
                     app.bot.send_message,
-                    chat_id=chat_id, text=markdown, **thread_kwargs,
+                    chat_id=chat_id,
+                    text=markdown,
+                    **thread_kwargs,
                 )
 
         for markdown, html in chunks[1:-1]:
@@ -1393,9 +1400,7 @@ class TelegramChannel(BaseChannel):
             await self._send_pairing_code_if_private(sender_id, update.message, user)
             return
         await update.message.reply_text(
-            f"👋 Hi {user.first_name}! I'm nanobot.\n\n"
-            "Send me a message and I'll respond!\n"
-            "Type /help to see available commands."
+            f"👋 Hi {user.first_name}! I'm nanobot.\n\nSend me a message and I'll respond!\nType /help to see available commands."
         )
 
     async def _on_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1415,9 +1420,7 @@ class TelegramChannel(BaseChannel):
         sid = str(user.id)
         return f"{sid}|{user.username}" if user.username else sid
 
-    async def _send_pairing_code_if_private(
-        self, sender_id: str, message: Message, user: User
-    ) -> None:
+    async def _send_pairing_code_if_private(self, sender_id: str, message: Message, user: User) -> None:
         if message.chat.type != "private":
             return
         await self._handle_message(
@@ -1475,9 +1478,7 @@ class TelegramChannel(BaseChannel):
         else:
             return f"[Reply to: {text}]"
 
-    async def _download_message_media(
-        self, msg: Message, *, add_failure_content: bool = False
-    ) -> tuple[list[str], list[str]]:
+    async def _download_message_media(self, msg: Message, *, add_failure_content: bool = False) -> tuple[list[str], list[str]]:
         """Download media from a message (current or reply). Returns (media_paths, content_parts)."""
         media_file = None
         media_type = None
@@ -1637,9 +1638,7 @@ class TelegramChannel(BaseChannel):
             )
         )
         if key not in self._inbound_workers:
-            self._inbound_workers[key] = asyncio.create_task(
-                self._drain_ordered_updates(key)
-            )
+            self._inbound_workers[key] = asyncio.create_task(self._drain_ordered_updates(key))
 
     async def _drain_ordered_updates(self, key: str) -> None:
         """Drain one Telegram session buffer in stable message order."""
@@ -1757,9 +1756,7 @@ class TelegramChannel(BaseChannel):
             content_parts.append(f"[location: {lat}, {lon}]")
 
         # Download current message media
-        current_media_paths, current_media_parts = await self._download_message_media(
-            message, add_failure_content=True
-        )
+        current_media_paths, current_media_parts = await self._download_message_media(message, add_failure_content=True)
         media_paths.extend(current_media_paths)
         content_parts.extend(current_media_parts)
         if current_media_paths:
@@ -1789,8 +1786,10 @@ class TelegramChannel(BaseChannel):
             key = f"{str_chat_id}:{media_group_id}"
             if key not in self._media_group_buffers:
                 self._media_group_buffers[key] = {
-                    "sender_id": sender_id, "chat_id": str_chat_id,
-                    "contents": [], "media": [],
+                    "sender_id": sender_id,
+                    "chat_id": str_chat_id,
+                    "contents": [],
+                    "media": [],
                     "metadata": metadata,
                     "session_key": session_key,
                 }
@@ -1826,8 +1825,10 @@ class TelegramChannel(BaseChannel):
                 return
             content = "\n".join(buf["contents"]) or "[empty message]"
             await self._handle_message(
-                sender_id=buf["sender_id"], chat_id=buf["chat_id"],
-                content=content, media=list(dict.fromkeys(buf["media"])),
+                sender_id=buf["sender_id"],
+                chat_id=buf["chat_id"],
+                content=content,
+                media=list(dict.fromkeys(buf["media"])),
                 metadata=buf["metadata"],
                 session_key=buf.get("session_key"),
             )
@@ -1924,11 +1925,18 @@ class TelegramChannel(BaseChannel):
         """Get file extension based on media type or original filename."""
         if mime_type:
             ext_map = {
-                "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
+                "image/jpeg": ".jpg",
+                "image/png": ".png",
+                "image/gif": ".gif",
                 "image/webp": ".webp",
-                "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a",
-                "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
-                "video/x-matroska": ".mkv", "video/3gpp": ".3gp",
+                "audio/ogg": ".ogg",
+                "audio/mpeg": ".mp3",
+                "audio/mp4": ".m4a",
+                "video/mp4": ".mp4",
+                "video/quicktime": ".mov",
+                "video/webm": ".webm",
+                "video/x-matroska": ".mkv",
+                "video/3gpp": ".3gp",
             }
             if mime_type in ext_map:
                 return ext_map[mime_type]
@@ -1946,10 +1954,7 @@ class TelegramChannel(BaseChannel):
         """Build inline keyboard markup if inline_keyboards is enabled."""
         if not buttons or not self.config.inline_keyboards:
             return None
-        keyboard = [
-            [InlineKeyboardButton(label, callback_data=self._safe_callback_data(label)) for label in row]
-            for row in buttons
-        ]
+        keyboard = [[InlineKeyboardButton(label, callback_data=self._safe_callback_data(label)) for label in row] for row in buttons]
         return InlineKeyboardMarkup(keyboard)
 
     @staticmethod
@@ -1999,3 +2004,4 @@ class TelegramChannel(BaseChannel):
                 "is_callback": True,
             },
         )
+# weave: run 'weave explain nanobot/channels/telegram/runtime.py' for per-hunk detail, 'weave check' to verify your resolution

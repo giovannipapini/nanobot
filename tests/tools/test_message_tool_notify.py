@@ -31,7 +31,6 @@ async def test_message_tool_notify_delivers_to_configured_target(monkeypatch, tm
     assert len(sent) == 1
     assert sent[0].channel == "telegram"
     assert sent[0].chat_id == "112851500"
-    # a notify send must not inherit the current conversation's metadata/message_id
     assert sent[0].metadata == {}
 
 
