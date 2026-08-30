@@ -2,9 +2,9 @@
 
 # pyright: reportIncompatibleMethodOverride=false
 
+import os
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import contextmanager
-import os
 from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any, cast
